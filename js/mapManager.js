@@ -1,0 +1,1462 @@
+// mapManager.js - Módulo para gestionar el mapa con GeoJSON y puntos de inicio automáticos
+class MapManager {
+    constructor(containerId, geojsonPath) {
+        this.containerId = containerId;
+        this.geojsonPath = geojsonPath;
+        this.map = null;
+        this.geojsonLayer = null;
+        this.startPointsLayer = null;
+        this.endPointsLayer   = null;
+        this.polygonLayer     = null;
+        this.additionalLayers = {};
+        this.markers          = [];
+        this.useFitBounds     = false;
+        this._minimap         = null;
+        this._layerControl    = null;
+        this._filtersManager  = null;
+        this._allGeojsonData  = null;
+        this.init();
+    }
+
+    async init() {
+        this.createMapContainer();
+        await this.initializeMap();
+        await this.loadGeoJSON();
+    }
+
+    createMapContainer() {
+        const container = document.getElementById(this.containerId);
+        container.innerHTML = `
+            <div id="map" style="width: 100%; height: 100%; border-radius: 8px;"></div>
+        `;
+    }
+
+    async initializeMap() {
+        // Inicializar el mapa centrado en Antioquia, Colombia
+        // Coordenadas del centro geográfico de Antioquia ajustadas
+        this.map = L.map('map', {
+            center: [7.140596, -75.450447], // Centro personalizado
+            zoom: 7.75, // Zoom personalizado
+            zoomControl: false,
+            attributionControl: false,
+            scrollWheelZoom: true,
+            wheelPxPerZoomLevel: 180,
+            zoomSnap: 0.25,         
+            zoomDelta: 0.25,
+            maxZoom: 18,
+            minZoom: 6
+        });
+
+        // === PANES PARA CONTROLAR ORDEN DE CAPAS ===
+        this.map.createPane('polygonsPane');
+        this.map.createPane('linesPane');
+        this.map.createPane('pointsPane');
+        this.map.createPane('startPointsPane'); // Nuevo pane para puntos de inicio
+
+        // Orden visual (z-index)
+        this.map.getPane('polygonsPane').style.zIndex = 400;
+        this.map.getPane('linesPane').style.zIndex = 500;
+        this.map.getPane('pointsPane').style.zIndex = 600;
+        this.map.getPane('startPointsPane').style.zIndex = 650; // Más alto que puntos normales
+
+        // Agregar capa base de CartoDB Light
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18,
+            minZoom: 6
+        }).addTo(this.map);
+
+        // Agregar control de escala
+        L.control.scale({
+            imperial: false,
+            metric: true,
+            position: 'bottomleft'
+        }).addTo(this.map);
+
+        // Event listeners para debugging - imprimir coordenadas y zoom en consola
+        this.map.on('moveend', () => {
+            const center = this.map.getCenter();
+            const zoom = this.map.getZoom();
+            console.log(`🗺️ Centro: [${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}], Zoom: ${zoom}`);
+        });
+
+        this.map.on('zoomend', () => {
+            const center = this.map.getCenter();
+            const zoom = this.map.getZoom();
+            console.log(`🔍 Zoom: ${zoom}, Centro: [${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}]`);
+        });
+
+        // También imprimir al hacer click
+        this.map.on('click', (e) => {
+            const zoom = this.map.getZoom();
+            console.log(`📍 Click en: [${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}], Zoom actual: ${zoom}`);
+        });
+    }
+
+    // Método para remover todas las capas base (fondo transparente)
+    removeBaseLayers() {
+        this.map.eachLayer((layer) => {
+            if (layer instanceof L.TileLayer) {
+                this.map.removeLayer(layer);
+            }
+        });
+        
+        const container = document.querySelector('.leaflet-container');
+        if (container) {
+            container.style.backgroundColor = 'transparent';
+        }
+    }
+
+    async loadGeoJSON() {
+        try {
+            const response = await fetch(this.geojsonPath);
+            const geojsonData = await response.json();
+
+            // Crear capa GeoJSON con estilos personalizados
+            this.geojsonLayer = L.geoJSON(geojsonData, {
+                pane: 'linesPane',
+                style: (feature) => this.getFeatureStyle(feature),
+                pointToLayer: (feature, latlng) => this.createMarker(feature, latlng),
+                onEachFeature: (feature, layer) => this.bindPopup(feature, layer)
+            }).addTo(this.map);
+
+            this._allGeojsonData = geojsonData;
+            this.createStartPoints(geojsonData);
+            this.createEndPoints(geojsonData);
+            this._initMinimap();
+            this._initLayerControl();
+            // No usar fitBounds para respetar el zoom y centro personalizados
+            
+        } catch (error) {
+            console.error('Error cargando GeoJSON:', error);
+            // En caso de error, usar vista por defecto
+            document.getElementById('map').innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #1a7a5e;">
+                    <p>Error cargando el mapa. Verifica que el archivo GeoJSON esté disponible.</p>
+                </div>
+            `;
+        }
+    }
+
+    /* =====================================================
+       NUEVA FUNCIONALIDAD: PUNTOS DE INICIO AUTOMÁTICOS
+       ===================================================== */
+
+    createStartPoints(geojsonData) {
+        console.log('🎯 Creando puntos de inicio para cada tramo...');
+        
+        const startPoints = [];
+        
+        geojsonData.features.forEach((feature) => {
+            if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
+                const startPoint = this.extractStartPoint(feature);
+                if (startPoint) {
+                    startPoints.push(startPoint);
+                }
+            }
+        });
+
+        // Crear capa de puntos de inicio
+        this.startPointsLayer = L.layerGroup().addTo(this.map);
+        
+        startPoints.forEach((pointFeature) => {
+            const marker = this.createStartPointMarker(pointFeature);
+            this.startPointsLayer.addLayer(marker);
+        });
+
+        console.log(`✅ Creados ${startPoints.length} puntos de inicio`);
+    }
+
+    extractStartPoint(lineFeature) {
+        try {
+            const geometry = lineFeature.geometry;
+            let startCoords;
+
+            if (geometry.type === 'LineString') {
+                startCoords = geometry.coordinates[0];
+            } else if (geometry.type === 'MultiLineString') {
+                // Tomar el primer punto de la primera línea
+                startCoords = geometry.coordinates[0][0];
+            }
+
+            if (startCoords && startCoords.length >= 2) {
+                return {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: startCoords
+                    },
+                    properties: {
+                        ...lineFeature.properties,
+                        isStartPoint: true,
+                        originalFeatureType: geometry.type
+                    }
+                };
+            }
+        } catch (error) {
+            console.warn('Error extrayendo punto de inicio:', error);
+        }
+        return null;
+    }
+
+    createStartPointMarker(pointFeature) {
+        const coords = pointFeature.geometry.coordinates;
+        const latlng = [coords[1], coords[0]];
+        const props = pointFeature.properties;
+
+        // Extraer código de convenio para determinar color
+        const convenioCode = this.extractConvenioCode(props.source);
+        
+        const markerIcon = L.divIcon({
+            className: '',
+            html: `<div style="
+                width:14px;height:14px;
+                background:#FF5722;
+                border:2.5px solid white;
+                border-radius:3px;
+                box-shadow:0 2px 6px rgba(0,0,0,0.4);
+            "></div>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        });
+
+        const marker = L.marker(latlng, {
+            icon: markerIcon,
+            pane: 'startPointsPane'
+        });
+
+        // Bind popup con información completa + galería de fotos
+        this.bindStartPointPopup(pointFeature, marker);
+
+        return marker;
+    }
+
+    bindStartPointPopup(feature, marker) {
+        const props = feature.properties;
+        const convenioCode = this.extractConvenioCode(props.source);
+        
+        let popupContent = '<div style="font-family: Arial; max-width: 400px;">';
+        
+        // Título principal
+        popupContent += `<div style="
+            background: linear-gradient(135deg, #1a7a5e 0%, #2fa87a 100%);
+            color: white;
+            padding: 12px 15px;
+            margin: -9px -13px 15px -13px;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+            font-size: 16px;
+        ">`;
+        popupContent += `🎯 INICIO DEL TRAMO</div>`;
+        
+        // Información principal
+        if (props.source) {
+            popupContent += `<div style="margin-bottom: 10px;">
+                <strong style="color: #1a7a5e;">Proyecto:</strong><br>
+                <span style="font-size: 13px;">${props.source}</span>
+            </div>`;
+        }
+        
+        if (props.name) {
+            popupContent += `<div style="margin-bottom: 10px;">
+                <strong style="color: #1a7a5e;">Código:</strong> 
+                <span style="background: #e6f4ed; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                    ${props.name}
+                </span>
+            </div>`;
+        }
+
+        // Coordenadas del punto de inicio
+        const coords = feature.geometry.coordinates;
+        popupContent += `<div style="margin-bottom: 15px; padding: 8px; background: #f8fcfa; border-radius: 6px; border-left: 4px solid #2fa87a;">
+            <strong style="color: #1a7a5e;">📍 Coordenadas de Inicio:</strong><br>
+            <small>Lat: ${coords[1].toFixed(6)}</small><br>
+            <small>Lon: ${coords[0].toFixed(6)}</small>
+        </div>`;
+
+        // Galería de fotos en miniatura
+        if (convenioCode) {
+            popupContent += this.createPhotoGalleryPreview(convenioCode);
+        }
+
+        // Botones de acción
+        popupContent += `<div style="text-align: center; margin-top: 15px;">`;
+        
+        // Botón Ver Fotos
+        if (convenioCode) {
+            popupContent += `
+                <button 
+                    onclick="
+                        console.log('🔍 Abriendo modal para:', '${convenioCode}');
+                        if (window.photoModalManager) {
+                            window.photoModalManager.openModal('${convenioCode}', '${props.name || 'Tramo'}');
+                        } else {
+                            alert('Error: Modal de fotos no disponible');
+                        }
+                    " 
+                    style="
+                        background: #2fa87a;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-weight: 600;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 2px 4px rgba(47, 168, 122, 0.3);
+                        margin-right: 8px;
+                    "
+                    onmouseover="this.style.background='#1a7a5e'"
+                    onmouseout="this.style.background='#2fa87a'"
+                >
+                    <i class="fas fa-camera" style="margin-right: 5px;"></i>
+                    Ver Todas las Fotos
+                </button>
+            `;
+        }
+
+        // Botón Ubicar Tramo
+        popupContent += `
+            <button 
+                onclick="window.mapManager.locateLineString('${props.id || props.name}')"
+                style="
+                    background: #4a90e2;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
+                "
+                onmouseover="this.style.background='#357abd'"
+                onmouseout="this.style.background='#4a90e2'"
+            >
+                <i class="fas fa-route" style="margin-right: 5px;"></i>
+                Ver Tramo Completo
+            </button>
+        `;
+
+        popupContent += '</div>';
+        popupContent += '</div>';
+
+        marker.bindPopup(popupContent, {
+            maxWidth: 420,
+            className: 'start-point-popup'
+        });
+
+        // Tooltip para identificación rápida
+        if (props.name) {
+            marker.bindTooltip(`🎯 ${props.name}`, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -12],
+                className: 'start-point-tooltip'
+            });
+        }
+    }
+
+    createPhotoGalleryPreview(convenioCode) {
+        const phases = ['antes', 'durante', 'despues'];
+        const phaseLabels = { antes: 'Antes', durante: 'Durante', despues: 'Después' };
+        const phaseColors = { antes: '#e74c3c', durante: '#f39c12', despues: '#27ae60' };
+        
+        let galleryHtml = `
+            <div style="margin: 15px 0;">
+                <strong style="color: #1a7a5e; margin-bottom: 8px; display: block;">📸 Galería de Fotos:</strong>
+                <div style="display: flex; gap: 8px; justify-content: space-between;">
+        `;
+
+        phases.forEach(phase => {
+            const photoPath = `fotos/${convenioCode}/${phase}/${convenioCode}_${phase}_1.jpg`;
+            galleryHtml += `
+                <div style="flex: 1; text-align: center;">
+                    <div style="
+                        width: 80px;
+                        height: 60px;
+                        border: 2px solid ${phaseColors[phase]};
+                        border-radius: 6px;
+                        overflow: hidden;
+                        margin: 0 auto 4px;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                    " onclick="
+                        if (window.photoModalManager) {
+                            window.photoModalManager.openModal('${convenioCode}', '${phaseLabels[phase]}');
+                            setTimeout(() => {
+                                const tabs = document.querySelectorAll('.photo-tab');
+                                tabs.forEach(tab => {
+                                    if (tab.dataset.phase === '${phase}') {
+                                        tab.click();
+                                    }
+                                });
+                            }, 500);
+                        }
+                    ">
+                        <img src="${photoPath}" 
+                             style="width: 100%; height: 100%; object-fit: cover;"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                             onload="this.nextElementSibling.style.display='none';">
+                        <div style="
+                            width: 100%;
+                            height: 100%;
+                            background: linear-gradient(45deg, ${phaseColors[phase]}22 25%, transparent 25%), 
+                                        linear-gradient(-45deg, ${phaseColors[phase]}22 25%, transparent 25%), 
+                                        linear-gradient(45deg, transparent 75%, ${phaseColors[phase]}22 75%), 
+                                        linear-gradient(-45deg, transparent 75%, ${phaseColors[phase]}22 75%);
+                            background-size: 10px 10px;
+                            background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: ${phaseColors[phase]};
+                            font-size: 24px;
+                        ">📷</div>
+                    </div>
+                    <small style="color: ${phaseColors[phase]}; font-weight: bold; font-size: 11px;">
+                        ${phaseLabels[phase]}
+                    </small>
+                </div>
+            `;
+        });
+
+        galleryHtml += '</div></div>';
+        return galleryHtml;
+    }
+
+    // Función para ubicar y resaltar un tramo específico
+    locateLineString(featureId) {
+        if (!this.geojsonLayer) return;
+
+        this.geojsonLayer.eachLayer((layer) => {
+            const props = layer.feature.properties;
+            if (props.id === featureId || props.name === featureId) {
+                // Resaltar el tramo
+                if (layer.setStyle) {
+                    layer.setStyle({
+                        color: '#dc143c',
+                        weight: 8,
+                        opacity: 1
+                    });
+
+                    // Hacer zoom al tramo
+                    if (layer.getBounds) {
+                        this.map.fitBounds(layer.getBounds(), { 
+                            padding: [50, 50],
+                            maxZoom: 15
+                        });
+                    }
+
+                    setTimeout(() => {
+                        layer.setStyle({ color: '#FFD600', weight: 5, opacity: 0.95 });
+                    }, 3000);
+                }
+            }
+        });
+    }
+
+    extractConvenioCode(source) {
+        if (!source) return null;
+        const match = source.match(/25AS\w*B\d+/);
+        return match ? match[0] : null;
+    }
+
+    getFeatureStyle(feature) {
+        if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
+            return { color: '#FFD600', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' };
+        }
+        return {};
+    }
+
+    _getFeatureStyleDim(feature) {
+        if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
+            return { color: '#FFD600', weight: 3, opacity: 0.15 };
+        }
+        return {};
+    }
+
+    _getFeatureStyleActive(feature) {
+        if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
+            return { color: '#FFD600', weight: 6, opacity: 1 };
+        }
+        return {};
+    }
+
+    createMarker(feature, latlng) {
+        // Crear marcadores personalizados para puntos (no puntos de inicio automáticos)
+        const markerIcon = L.divIcon({
+            className: 'custom-marker',
+            html: `
+                <div style="
+                    background-color: #2fa87a;
+                    border: 3px solid white;
+                    border-radius: 50%;
+                    width: 20px;
+                    height: 20px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                "></div>
+            `,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        return L.marker(latlng, {
+            icon: markerIcon,
+            pane: 'pointsPane'
+        });
+    }
+
+    bindPopup(feature, layer) {
+        if (!feature.properties) return;
+
+        const props = feature.properties;
+        const isLine = feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString';
+
+        if (isLine) {
+            // Cursor de mano para indicar que es clickeable
+            layer.on('add', function() {
+                if (this._path) this._path.style.cursor = 'pointer';
+            });
+
+            // Clic → abrir TramoModal
+            layer.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                const modal = window.tramoModal;
+                if (modal) {
+                    modal.openFromFeature(feature);
+                } else {
+                    console.warn('TramoModal no está disponible en window.tramoModal');
+                }
+            });
+
+            // Hover: resaltar y mostrar tooltip rápido con el nombre
+            layer.on('mouseover', function() {
+                const o = this.options;
+                this._preHoverStyle = { color: o.color||'#FFD600', weight: o.weight||5, opacity: o.opacity||0.95 };
+                this.setStyle({ color: '#ffffff', weight: 8, opacity: 1 });
+            });
+            layer.on('mouseout', function() {
+                this.setStyle(this._preHoverStyle || { color:'#FFD600', weight:5, opacity:0.95 });
+            });
+
+            // Tooltip ligero con nombre del tramo
+            const nombre = props.name || props.CIRCUITO || props.NOMBRE_VIA || 'Tramo';
+            layer.bindTooltip(`<span style="font-weight:700;">${nombre}</span><br><small style="opacity:0.75;">Clic para ver detalle</small>`, {
+                permanent: false,
+                direction: 'top',
+                className: 'municipio-tooltip',
+                sticky: true
+            });
+
+        } else if (feature.geometry.type === 'Point') {
+            // Puntos: mantener comportamiento original con coordenadas
+            const coords = feature.geometry.coordinates;
+            let content = `<div style="font-family:Arial;max-width:240px;">`;
+            if (props.source) content += `<strong style="color:#1a7a5e;">${props.source}</strong><br>`;
+            if (props.name)   content += `<strong>Tramo:</strong> ${props.name}<br>`;
+            content += `<small>Lat: ${coords[1].toFixed(6)} · Lon: ${coords[0].toFixed(6)}</small></div>`;
+            layer.bindPopup(content, { maxWidth: 260 });
+        }
+    }
+
+    calculateLineLength(coordinates) {
+        // Calcular longitud aproximada de una línea en metros
+        let length = 0;
+        for (let i = 0; i < coordinates.length - 1; i++) {
+            const p1 = L.latLng(coordinates[i][1], coordinates[i][0]);
+            const p2 = L.latLng(coordinates[i + 1][1], coordinates[i + 1][0]);
+            length += p1.distanceTo(p2);
+        }
+        return length;
+    }
+
+    // Método para mostrar/ocultar puntos de inicio
+    toggleStartPoints(show = true) {
+        if (this.startPointsLayer) {
+            if (show) {
+                this.map.addLayer(this.startPointsLayer);
+            } else {
+                this.map.removeLayer(this.startPointsLayer);
+            }
+        }
+    }
+
+    // Resto de métodos existentes...
+    addLegend() {
+        const legend = L.control({ position: 'bottomright' });
+
+        legend.onAdd = function(map) {
+            const div = L.DomUtil.create('div', 'map-legend');
+            div.innerHTML = `
+                <div style="
+                    background: white;
+                    padding: 15px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                    border: 2px solid #2fa87a;
+                ">
+                    <h4 style="margin: 0 0 10px 0; color: #1a7a5e; font-size: 14px;">Leyenda</h4>
+                    <div style="margin-bottom: 8px;">
+                        <div style="display: inline-block; width: 20px; height: 4px; background: #2fa87a; margin-right: 8px; vertical-align: middle;"></div>
+                        <span style="font-size: 12px;">Tramos viales</span>
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <div style="display: inline-block; width: 12px; height: 12px; background: #2fa87a; border: 2px solid white; border-radius: 50%; margin-right: 8px; vertical-align: middle;"></div>
+                        <span style="font-size: 12px;">Puntos de referencia</span>
+                    </div>
+                    <div>
+                        <div style="display: inline-block; width: 14px; height: 14px; background: linear-gradient(135deg, #2fa87a 0%, #1a7a5e 100%); border: 2px solid white; border-radius: 50%; margin-right: 8px; vertical-align: middle;"></div>
+                        <span style="font-size: 12px;">Inicio de tramos</span>
+                    </div>
+                </div>
+            `;
+            return div;
+        };
+
+        legend.addTo(this.map);
+    }
+
+    setAntioquiaView(animate = true) {
+        const antioquiaBounds = [[4.8, -77.2], [8.8, -73.8]];
+        if (animate) {
+            this.map.flyToBounds(antioquiaBounds, { padding:[20,20], duration:1.2, easeLinearity:0.25 });
+        } else {
+            this.map.fitBounds(antioquiaBounds, { padding:[20,20], animate:false });
+        }
+    }
+
+    // Métodos para polylines (mantener compatibilidad)
+    addPolyline(latlngs, options = {}) {
+        const defaultOptions = {
+            color: '#2fa87a',
+            weight: 4,
+            opacity: 0.8,
+            smoothFactor: 1.0
+        };
+
+        const mergedOptions = { ...defaultOptions, ...options };
+        const polyline = L.polyline(latlngs, mergedOptions).addTo(this.map);
+
+        if (options.fitBounds !== false) {
+            this.map.fitBounds(polyline.getBounds());
+        }
+
+        return polyline;
+    }
+
+    addPolylineWithPopup(latlngs, popupContent, options = {}) {
+        const polyline = this.addPolyline(latlngs, options);
+        
+        if (popupContent) {
+            polyline.bindPopup(popupContent);
+        }
+
+        if (options.tooltip) {
+            polyline.bindTooltip(options.tooltip, {
+                permanent: false,
+                direction: 'center'
+            });
+        }
+
+        polyline.on('mouseover', function(e) {
+            this.setStyle({
+                weight: options.hoverWeight || (options.weight || 4) + 2,
+                opacity: 1
+            });
+        });
+
+        polyline.on('mouseout', function(e) {
+            this.setStyle({
+                weight: options.weight || 4,
+                opacity: options.opacity || 0.8
+            });
+        });
+
+        return polyline;
+    }
+
+    clearPolylines() {
+        this.map.eachLayer((layer) => {
+            if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+                this.map.removeLayer(layer);
+            }
+        });
+    }
+
+    getPolylineCenter(latlngs) {
+        const polyline = L.polyline(latlngs);
+        return polyline.getCenter();
+    }
+
+    getPolylineLength(latlngs) {
+        let totalLength = 0;
+        for (let i = 0; i < latlngs.length - 1; i++) {
+            const p1 = L.latLng(latlngs[i]);
+            const p2 = L.latLng(latlngs[i + 1]);
+            totalLength += p1.distanceTo(p2);
+        }
+        return totalLength;
+    }
+
+    // Método para filtrar por fuente (source)
+    filterBySource(sourceName) {
+        if (this.geojsonLayer) {
+            this.map.removeLayer(this.geojsonLayer);
+        }
+
+        if (!sourceName || sourceName === '') {
+            this.loadGeoJSON();
+        } else {
+            fetch(this.geojsonPath)
+                .then(response => response.json())
+                .then(data => {
+                    const filtered = {
+                        type: 'FeatureCollection',
+                        features: data.features.filter(f => 
+                            f.properties.source && f.properties.source.includes(sourceName)
+                        )
+                    };
+
+                    this.geojsonLayer = L.geoJSON(filtered, {
+                        style: (feature) => this.getFeatureStyle(feature),
+                        pointToLayer: (feature, latlng) => this.createMarker(feature, latlng),
+                        onEachFeature: (feature, layer) => this.bindPopup(feature, layer)
+                    }).addTo(this.map);
+
+                    // Recrear puntos de inicio filtrados
+                    if (this.startPointsLayer) {
+                        this.map.removeLayer(this.startPointsLayer);
+                    }
+                    this.createStartPoints(filtered);
+
+                    if (this.geojsonLayer.getBounds().isValid()) {
+                        this.map.fitBounds(this.geojsonLayer.getBounds(), {
+                            padding: [50, 50]
+                        });
+                    }
+                });
+        }
+    }
+
+    // Resto de métodos para polígonos (municipios) - mantener código existente
+    async loadPolygonGeoJSON(geojsonPath, layerName = 'municipios', options = {}) {
+        try {
+            const response = await fetch(geojsonPath);
+            const geojsonData = await response.json();
+
+            const defaultOptions = {
+                pane: 'polygonsPane',
+                style: (feature) => this.getPolygonStyle(feature, options),
+                onEachFeature: (feature, layer) => this.bindPolygonPopup(feature, layer, options)
+            };
+
+            const polygonLayer = L.geoJSON(geojsonData, defaultOptions).addTo(this.map);
+
+            this.additionalLayers[layerName] = polygonLayer;
+
+            if (options.fitBounds === true && polygonLayer.getBounds().isValid()) {
+                this.map.fitBounds(polygonLayer.getBounds(), { padding: [20, 20] });
+            }
+
+            console.log(`Capa de polígonos '${layerName}' cargada exitosamente`);
+            return polygonLayer;
+
+        } catch (error) {
+            console.error(`Error cargando polígonos de ${geojsonPath}:`, error);
+            return null;
+        }
+    }
+
+    getPolygonStyle(feature, customOptions = {}) {
+        const defaultStyle = {
+            fillColor: '#2fa87a',
+            fillOpacity: 0.15,
+            color: '#1a7a5e',
+            weight: 2,
+            opacity: 0.6
+        };
+
+        if (customOptions.styleBySubregion && feature.properties.SUBREGION) {
+            const subregionColors = {
+                'ORIENTE': '#2fa87a',
+                'OCCIDENTE': '#4a90e2',
+                'NORTE': '#f39c12',
+                'SUROESTE': '#e74c3c',
+                'NORDESTE': '#9b59b6',
+                'URABA': '#e67e22',
+                'BAJO CAUCA': '#1abc9c',
+                'MAGDALENA MEDIO': '#34495e',
+                'VALLE DE ABURRA': '#27ae60'
+            };
+            
+            const color = subregionColors[feature.properties.SUBREGION] || '#2fa87a';
+            return {
+                ...defaultStyle,
+                fillColor: color,
+                color: color,
+                ...customOptions.style
+            };
+        }
+
+        return { ...defaultStyle, ...customOptions.style };
+    }
+
+    bindPolygonPopup(feature, layer, options = {}) {
+        this._bindMunicipioTooltipAndClick(feature, layer);
+    }
+
+    togglePolygonLayer(layerName = 'municipios', show = true) {
+        const layer = this.additionalLayers[layerName];
+        if (layer) {
+            if (show) {
+                this.map.addLayer(layer);
+            } else {
+                this.map.removeLayer(layer);
+            }
+        }
+    }
+
+    filterMunicipiosBySubregion(subregion) {
+        const layer = this.additionalLayers['municipios'];
+        if (!layer) return;
+
+        layer.eachLayer((municipioLayer) => {
+            const props = municipioLayer.feature.properties;
+            if (subregion === '' || props.SUBREGION === subregion) {
+                municipioLayer.setStyle({ opacity: 0.6, fillOpacity: 0.15 });
+            } else {
+                municipioLayer.setStyle({ opacity: 0.1, fillOpacity: 0.05 });
+            }
+        });
+    }
+
+
+    syncMapWithFilter(filteredData, isActive) {
+        // 1. POLÍGONOS — resaltar municipios con tramos activos, atenuar el resto
+        const polyLayer = this.additionalLayers['municipios'];
+        if (polyLayer) {
+            if (!isActive) {
+                // Estado inicial: todos los municipios con estilo por defecto
+                polyLayer.eachLayer(l => l.setStyle({
+                    fillColor: '#2fa87a',
+                    fillOpacity: 0.15,
+                    color: '#1a7a5e',
+                    weight: 2,
+                    opacity: 0.6
+                }));
+            } else {
+                const activeMpios = new Set(
+                    (filteredData||[]).map(d => this._normalizeText(d.MPIO_NOMBRE||''))
+                );
+                polyLayer.eachLayer(l => {
+                    const props = l.feature.properties;
+                    const n = this._normalizeText(props.mpio_nombr||props.MPIO_NOMBRE||props.nombre||'');
+                    if (activeMpios.has(n)) {
+                        // Municipio con tramos filtrados: resaltar en verde intenso
+                        l.setStyle({
+                            fillColor: '#018d38',
+                            fillOpacity: 0.45,
+                            color: '#005a22',
+                            weight: 3,
+                            opacity: 1
+                        });
+                        l.bringToFront();
+                    } else {
+                        // Municipio sin tramos filtrados: casi invisible
+                        l.setStyle({
+                            fillColor: '#999',
+                            fillOpacity: 0.04,
+                            color: '#bbb',
+                            weight: 1,
+                            opacity: 0.25
+                        });
+                    }
+                });
+            }
+        }
+
+        // 2. LÍNEAS — mostrar solo los tramos filtrados, ocultar el resto
+        if (this.geojsonLayer) {
+            if (!isActive) {
+                this.geojsonLayer.eachLayer(l => {
+                    if (l.setStyle) l.setStyle({ color: '#FFD600', weight: 5, opacity: 0.95 });
+                });
+            } else {
+                const activeCircuitos = new Set(
+                    (filteredData||[]).map(d => (d.CIRCUITO||d.NOMBRE_VIA||'').toUpperCase()).filter(Boolean)
+                );
+                this.geojsonLayer.eachLayer(l => {
+                    if (!l.setStyle) return;
+                    const n = (l.feature?.properties?.name||l.feature?.properties?.CIRCUITO||l.feature?.properties?.NOMBRE_VIA||'').toUpperCase();
+                    // Tramos filtrados: resaltar; no filtrados: ocultar completamente
+                    l.setStyle(activeCircuitos.has(n)
+                        ? { color: '#FFD600', weight: 7, opacity: 1 }
+                        : { color: '#FFD600', weight: 0, opacity: 0 }
+                    );
+                });
+            }
+        }
+
+        // 3. MARCADORES — solo mostrar los del filtro activo
+        if (this._allGeojsonData) {
+            if (this.startPointsLayer) { this.map.removeLayer(this.startPointsLayer); this.startPointsLayer = null; }
+            if (this.endPointsLayer)   { this.map.removeLayer(this.endPointsLayer);   this.endPointsLayer   = null; }
+            const markerData = isActive ? this._buildFilteredGeoJSON(filteredData) : this._allGeojsonData;
+            this.createStartPoints(markerData);
+            this.createEndPoints(markerData);
+        }
+
+        // 4. ZOOM
+        if (!isActive) {
+            this.map.fitBounds([[4.8,-77.2],[8.8,-73.8]], { padding:[20,20], animate:false });
+        } else {
+            // Si hay un único circuito filtrado, hacer zoom directo a sus líneas en el geojson
+            const circuitos = [...new Set((filteredData||[]).map(d => (d.CIRCUITO||'').toUpperCase()).filter(Boolean))];
+            if (circuitos.length > 0 && circuitos.length <= 3 && this.geojsonLayer) {
+                let bounds = null;
+                this.geojsonLayer.eachLayer(l => {
+                    if (!l.feature) return;
+                    const n = (l.feature.properties?.name || l.feature.properties?.CIRCUITO || '').toUpperCase();
+                    if (circuitos.includes(n)) {
+                        try {
+                            const b = l.getBounds ? l.getBounds() : null;
+                            if (b && b.isValid()) bounds = bounds ? bounds.extend(b) : L.latLngBounds(b);
+                        } catch(e) {}
+                    }
+                });
+                if (bounds && bounds.isValid()) {
+                    this.map.flyToBounds(bounds, { padding:[60,60], maxZoom:12, duration:1.2, easeLinearity:0.25 });
+                    return;
+                }
+            }
+            // Fallback: zoom por municipios/subregiones
+            const mpios = [...new Set((filteredData||[]).map(d => d.MPIO_NOMBRE||'').filter(Boolean))];
+            const subs  = [...new Set((filteredData||[]).map(d => d.SUBREGION||'').filter(Boolean))];
+            this.zoomToMunicipios(mpios, subs);
+        }
+    }
+
+    _buildFilteredGeoJSON(filteredData) {
+        if (!this._allGeojsonData) return { type:'FeatureCollection', features:[] };
+        const activeSet = new Set(
+            (filteredData||[]).map(d=>(d.CIRCUITO||d.NOMBRE_VIA||'').toUpperCase()).filter(Boolean)
+        );
+        return {
+            type:'FeatureCollection',
+            features: this._allGeojsonData.features.filter(f => {
+                const n = (f.properties?.name||f.properties?.CIRCUITO||'').toUpperCase();
+                return activeSet.has(n);
+            })
+        };
+    }
+
+    highlightMunicipio(municipioNombre, isMain = false) {
+        const layer = this.additionalLayers['municipios'];
+        if (!layer) return;
+
+        layer.eachLayer((municipioLayer) => {
+            const props = municipioLayer.feature.properties;
+            const nombre = props.mpio_nombr || props.MPIO_NOMBRE || props.nombre;
+            
+            if (nombre && nombre.toUpperCase() === municipioNombre.toUpperCase()) {
+                municipioLayer.setStyle({
+                    fillColor: isMain ? '#018d38' : '#2fa87a',
+                    fillOpacity: isMain ? 0.55 : 0.38,
+                    weight: isMain ? 4 : 3,
+                    color: isMain ? '#005a22' : '#018d38',
+                    opacity: 1
+                });
+                municipioLayer.bringToFront();
+            }
+        });
+    }
+
+    dimNonFilteredMunicipios(activeMunicipioNames) {
+        const layer = this.additionalLayers['municipios'];
+        if (!layer) return;
+
+        const nameSet = new Set((activeMunicipioNames || []).map(n => (n || '').toUpperCase()));
+        const hasFilter = nameSet.size > 0;
+
+        layer.eachLayer((municipioLayer) => {
+            const props = municipioLayer.feature.properties;
+            const nombre = (props.mpio_nombr || props.MPIO_NOMBRE || props.nombre || '').toUpperCase();
+            const isActive = !hasFilter || nameSet.has(nombre);
+
+            if (!isActive) {
+                municipioLayer.setStyle({
+                    fillColor: '#888',
+                    fillOpacity: 0.04,
+                    color: '#aaa',
+                    weight: 1,
+                    opacity: 0.3
+                });
+            }
+        });
+    }
+
+    resetMunicipiosStyle() {
+        const layer = this.additionalLayers['municipios'];
+        if (!layer) return;
+
+        layer.eachLayer((municipioLayer) => {
+            municipioLayer.setStyle({
+                fillColor: '#2fa87a',
+                fillOpacity: 0.15,
+                color: '#1a7a5e',
+                weight: 2,
+                opacity: 0.6
+            });
+        });
+    }
+
+    resetMapToInitialState() {
+        // Restaurar estilos de municipios
+        this.resetMunicipiosStyle();
+
+        // Restaurar todos los tramos a estilo normal
+        if (this.geojsonLayer) {
+            this.geojsonLayer.eachLayer(layer => {
+                if (layer.setStyle) {
+                    layer.setStyle({ color: '#FFD600', weight: 5, opacity: 0.95 });
+                }
+            });
+        }
+
+        // Restaurar todos los puntos de inicio y fin
+        if (this._allGeojsonData) {
+            if (this.startPointsLayer) this.map.removeLayer(this.startPointsLayer);
+            if (this.endPointsLayer)   this.map.removeLayer(this.endPointsLayer);
+            this.createStartPoints(this._allGeojsonData);
+            this.createEndPoints(this._allGeojsonData);
+        }
+
+        // Zoom al estado inicial de Antioquia
+        this.map.fitBounds([[4.8,-77.2],[8.8,-73.8]], { padding:[20,20], animate:false });
+    }
+
+    getMunicipiosList() {
+        const layer = this.additionalLayers['municipios'];
+        if (!layer) return [];
+
+        const municipios = [];
+        layer.eachLayer((municipioLayer) => {
+            const props = municipioLayer.feature.properties;
+            municipios.push({
+                nombre: props.MPIO_NOMBRE || props.MUNICIPIO || props.nombre,
+                subregion: props.SUBREGION,
+                codigo: props.COD_MPIO
+            });
+        });
+
+        return municipios.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }
+
+    /* ════════════════════════════════════════════════════
+       NUEVAS FUNCIONALIDADES
+    ════════════════════════════════════════════════════ */
+
+    /* ── Puntos de fin de tramo ── */
+    createEndPoints(geojsonData) {
+        if (this.endPointsLayer) {
+            this.map.removeLayer(this.endPointsLayer);
+        }
+        this.endPointsLayer = L.layerGroup().addTo(this.map);
+
+        geojsonData.features.forEach(feature => {
+            const geo = feature.geometry;
+            if (geo.type !== 'LineString' && geo.type !== 'MultiLineString') return;
+
+            let endCoords;
+            if (geo.type === 'LineString') {
+                endCoords = geo.coordinates[geo.coordinates.length - 1];
+            } else {
+                const lastLine = geo.coordinates[geo.coordinates.length - 1];
+                endCoords = lastLine[lastLine.length - 1];
+            }
+            if (!endCoords) return;
+
+            const icon = L.divIcon({
+                className: '',
+                html: `<div style="
+                    width:14px;height:14px;
+                    background:#FF5722;
+                    border:2.5px solid white;
+                    border-radius:3px;
+                    box-shadow:0 2px 6px rgba(0,0,0,0.4);
+                "></div>`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            });
+
+            const marker = L.marker([endCoords[1], endCoords[0]], {
+                icon,
+                pane: 'startPointsPane'
+            });
+            marker.bindTooltip('Fin de tramo', {
+                className: 'municipio-tooltip',
+                direction: 'top'
+            });
+            this.endPointsLayer.addLayer(marker);
+        });
+    }
+
+    /* ── Minimapa de ubicación ── */
+    _initMinimap() {
+        if (this._minimap) return;
+
+        // Control Leaflet que contiene el div del minimapa
+        const minimapControl = L.control({ position: 'bottomright' });
+        minimapControl.onAdd = () => {
+            const div = L.DomUtil.create('div');
+            div.style.cssText = `
+                width:140px; height:110px;
+                background:#f0faf5;
+                border:2px solid #018d38;
+                border-radius:8px;
+                overflow:hidden;
+                box-shadow:0 2px 8px rgba(0,0,0,0.25);
+                margin-bottom:4px;
+            `;
+            div.id = 'minimap-div';
+            L.DomEvent.disableClickPropagation(div);
+            L.DomEvent.disableScrollPropagation(div);
+            return div;
+        };
+        minimapControl.addTo(this.map);
+
+        setTimeout(() => {
+            const minimapDiv = document.getElementById('minimap-div');
+            if (!minimapDiv) return;
+
+            const minimap = L.map('minimap-div', {
+                zoomControl: false,
+                attributionControl: false,
+                dragging: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                keyboard: false,
+                tap: false
+            });
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+                maxZoom: 10
+            }).addTo(minimap);
+
+            minimap.fitBounds([[4.8, -77.2], [8.8, -73.8]]);
+
+            const viewRect = L.rectangle(this.map.getBounds(), {
+                color: '#018d38', weight: 2,
+                fillColor: '#018d38', fillOpacity: 0.2
+            }).addTo(minimap);
+
+            // Actualizar rectángulo continuamente
+            const updateRect = () => {
+                try { viewRect.setBounds(this.map.getBounds()); } catch(e) {}
+            };
+            this.map.on('move zoom moveend zoomend', updateRect);
+            // flyToBounds anima internamente sin disparar 'move' frame a frame
+            // usar setInterval durante la animación para que el rect siga el vuelo
+            let _mmInterval = null;
+            this.map.on('movestart', () => {
+                if (_mmInterval) clearInterval(_mmInterval);
+                _mmInterval = setInterval(updateRect, 40);
+            });
+            this.map.on('moveend', () => {
+                if (_mmInterval) { clearInterval(_mmInterval); _mmInterval = null; }
+                updateRect();
+            });
+
+            this._minimap = minimap;
+        }, 900);
+    }
+
+    /* ── Control de capas ── */
+    _initLayerControl() {
+        if (this._layerControl) return;
+
+        const ctrl = L.control({ position: 'topright' });
+        ctrl.onAdd = () => {
+            const div = L.DomUtil.create('div', 'map-layer-control');
+            div.style.cssText = `
+                background:white;
+                border:1.5px solid #d8ede3;
+                border-radius:10px;
+                padding:10px 12px;
+                font-family:'Prompt',Arial,sans-serif;
+                font-size:12px;
+                box-shadow:0 2px 10px rgba(11,86,64,0.15);
+                min-width:150px;
+            `;
+            // Icono cuadrado naranja = mismo marcador de inicio y fin
+            const puntoDot = `<span style="width:12px;height:12px;background:#FF5722;border:2px solid white;border-radius:3px;display:inline-block;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></span>`;
+            div.innerHTML = `
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#0b5640;margin-bottom:8px;">Capas</div>
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:6px;padding:2px 4px;border-radius:4px;">
+                    <input type="checkbox" id="lc-municipios" checked style="accent-color:#018d38;">
+                    <span style="display:flex;align-items:center;gap:5px;">
+                        <span style="width:14px;height:14px;border:2px solid #018d38;border-radius:3px;background:rgba(1,141,56,0.12);display:inline-block;flex-shrink:0;"></span>
+                        Municipios
+                    </span>
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:6px;padding:2px 4px;border-radius:4px;">
+                    <input type="checkbox" id="lc-circuitos" checked style="accent-color:#018d38;">
+                    <span style="display:flex;align-items:center;gap:5px;">
+                        <span style="width:18px;height:4px;background:#FFD600;border-radius:2px;display:inline-block;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.2);"></span>
+                        Circuitos
+                    </span>
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:6px;padding:2px 4px;border-radius:4px;">
+                    <input type="checkbox" id="lc-inicio" checked style="accent-color:#018d38;">
+                    <span style="display:flex;align-items:center;gap:5px;">
+                        ${puntoDot}
+                        Inicio tramo
+                    </span>
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:2px 4px;border-radius:4px;">
+                    <input type="checkbox" id="lc-fin" checked style="accent-color:#018d38;">
+                    <span style="display:flex;align-items:center;gap:5px;">
+                        ${puntoDot}
+                        Fin tramo
+                    </span>
+                </label>
+            `;
+            L.DomEvent.disableClickPropagation(div);
+            return div;
+        };
+        ctrl.addTo(this.map);
+
+        setTimeout(() => {
+            document.getElementById('lc-municipios')?.addEventListener('change', e => {
+                this.togglePolygonLayer('municipios', e.target.checked);
+            });
+            document.getElementById('lc-circuitos')?.addEventListener('change', e => {
+                if (this.geojsonLayer) {
+                    e.target.checked
+                        ? this.map.addLayer(this.geojsonLayer)
+                        : this.map.removeLayer(this.geojsonLayer);
+                }
+            });
+            document.getElementById('lc-inicio')?.addEventListener('change', e => {
+                this.toggleStartPoints(e.target.checked);
+            });
+            document.getElementById('lc-fin')?.addEventListener('change', e => {
+                if (this.endPointsLayer) {
+                    e.target.checked
+                        ? this.map.addLayer(this.endPointsLayer)
+                        : this.map.removeLayer(this.endPointsLayer);
+                }
+            });
+        }, 1300);
+
+        this._layerControl = ctrl;
+    }
+
+    /* ── Referencia al filtersManager (para clic en municipio) ── */
+    setFiltersManager(fm) {
+        this._filtersManager = fm;
+    }
+
+    /* ── Tooltip + clic en polígono de municipio ── */
+    _bindMunicipioTooltipAndClick(feature, layer) {
+        const props  = feature.properties;
+        const nombre = props.mpio_nombr || props.MPIO_NOMBRE || props.nombre || 'Municipio';
+
+        layer.bindTooltip(`<span style="font-weight:700;">${nombre}</span>`, {
+            permanent: false,
+            direction: 'center',
+            className: 'municipio-tooltip',
+            opacity: 1
+        });
+
+        layer.on('mouseover', function() {
+            this.setStyle({ fillOpacity: 0.4, weight: 3 });
+        });
+        layer.on('mouseout', function() {
+            this.setStyle({ fillOpacity: 0.15, weight: 2 });
+        });
+
+        layer.on('click', () => {
+            const fm = this._filtersManager;
+            if (!fm) return;
+            if (fm.filters.municipio === nombre) {
+                fm.removeFilter('municipio');
+            } else {
+                fm.filters.municipio = nombre;
+                const el = document.getElementById('municipio-filter');
+                if (el) el.value = nombre;
+                fm.applyFilters();
+            }
+        });
+    }
+
+    /* ── Filtrar visibilidad de tramos según filtros activos ── */
+    filterLayersByNames(activeNames) {
+        if (!this.geojsonLayer) return;
+
+        const hasFilter = activeNames && activeNames.length > 0;
+        const nameSet   = new Set((activeNames || []).map(n => (n || '').toUpperCase()));
+
+        this.geojsonLayer.eachLayer(layer => {
+            const props = layer.feature?.properties || {};
+            const name  = (props.name || props.CIRCUITO || props.NOMBRE_VIA || '').toUpperCase();
+            const match = !hasFilter || nameSet.has(name);
+            if (layer.setStyle) {
+                // Si hay filtro: ocultar completamente los no coincidentes (opacity 0), resaltar los coincidentes
+                if (hasFilter) {
+                    layer.setStyle(match
+                        ? { color: '#FFD600', weight: 7, opacity: 1 }
+                        : { color: '#FFD600', weight: 0, opacity: 0 }
+                    );
+                } else {
+                    layer.setStyle(this._getFeatureStyleActive(layer.feature));
+                }
+            }
+        });
+
+        // Actualizar puntos de inicio y fin según filtro
+        if (this._allGeojsonData) {
+            // Remover capas de puntos existentes
+            if (this.startPointsLayer) this.map.removeLayer(this.startPointsLayer);
+            if (this.endPointsLayer)   this.map.removeLayer(this.endPointsLayer);
+
+            const filteredData = hasFilter
+                ? { type:'FeatureCollection', features: this._allGeojsonData.features.filter(f => {
+                        const n = (f.properties?.name || f.properties?.CIRCUITO || f.properties?.NOMBRE_VIA || '').toUpperCase();
+                        return nameSet.has(n);
+                    })}
+                : this._allGeojsonData;
+
+            this.createStartPoints(filteredData);
+            this.createEndPoints(filteredData);
+        }
+    }
+
+    /* ── Zoom al bounds de subregiones/municipios filtrados ── */
+    zoomToMunicipios(municipiosNombres, subregionesNombres) {
+        const layer = this.additionalLayers['municipios'];
+        if (!layer) return;
+
+        const sinFiltro = (!subregionesNombres || subregionesNombres.length === 0) &&
+                          (!municipiosNombres   || municipiosNombres.length === 0);
+        if (sinFiltro) {
+            this.setAntioquiaView(true);
+            return;
+        }
+
+        const subregSet = new Set((subregionesNombres || []).map(s => this._normalizeText(s)));
+        const mpioSet   = new Set((municipiosNombres  || []).map(m => this._normalizeText(m)));
+
+        let combinedBounds = null;
+
+        layer.eachLayer(municipioLayer => {
+            const props  = municipioLayer.feature.properties;
+            const subreg = this._normalizeText(props.subregion || props.SUBREGION || '');
+            const mpio   = this._normalizeText(props.mpio_nombr || props.MPIO_NOMBRE || props.nombre || '');
+
+            const match = (subregSet.size > 0 && subregSet.has(subreg)) ||
+                          (mpioSet.size   > 0 && mpioSet.has(mpio));
+
+            if (match) {
+                const bounds = municipioLayer.getBounds();
+                if (bounds.isValid()) {
+                    combinedBounds = combinedBounds
+                        ? combinedBounds.extend(bounds)
+                        : L.latLngBounds(bounds);
+                }
+            }
+        });
+
+        if (combinedBounds && combinedBounds.isValid()) {
+            this.map.flyToBounds(combinedBounds, {
+                padding: [40, 40],
+                maxZoom: 11,
+                duration: 1.2,
+                easeLinearity: 0.25
+            });
+        } else {
+            this.setAntioquiaView(true);
+        }
+    }
+
+    /* ── Normalizar texto para comparación robusta ── */
+    _normalizeText(str) {
+        return (str || '').toUpperCase()
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '');
+    }
+
+
+}
+
+// Estilos CSS adicionales para los nuevos elementos
+const additionalStyles = document.createElement('style');
+additionalStyles.textContent = `
+    .custom-popup .leaflet-popup-content-wrapper {
+        border-radius: 8px;
+        border: 2px solid #2fa87a;
+    }
+    
+    .custom-popup .leaflet-popup-tip {
+        background-color: white;
+    }
+    
+    .start-point-popup .leaflet-popup-content-wrapper {
+        border-radius: 12px;
+        border: 3px solid #2fa87a;
+        background: white;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+    
+    .start-point-popup .leaflet-popup-tip {
+        background-color: white;
+        border: 1px solid #2fa87a;
+    }
+    
+    .leaflet-container {
+        font-family: Arial, sans-serif;
+    }
+
+    .municipio-tooltip {
+        background: rgba(11,86,64,0.92) !important;
+        border: none !important;
+        border-radius: 6px !important;
+        color: white !important;
+        font-family: 'Prompt', Arial, sans-serif !important;
+        font-weight: 700 !important;
+        font-size: 12px !important;
+        padding: 5px 10px !important;
+        box-shadow: 0 3px 10px rgba(11,86,64,0.35) !important;
+        white-space: nowrap !important;
+    }
+
+    .municipio-tooltip::before {
+        border-top-color: rgba(11,86,64,0.92) !important;
+    }
+    
+    .start-point-tooltip {
+        background-color: #2fa87a !important;
+        border: 2px solid white !important;
+        border-radius: 8px !important;
+        color: white !important;
+        font-weight: bold !important;
+        font-size: 12px !important;
+        padding: 6px 10px !important;
+        box-shadow: 0 3px 8px rgba(47,168,122,0.4) !important;
+    }
+
+    .start-point-tooltip::before {
+        border-top-color: #2fa87a !important;
+    }
+    
+    .start-point-marker {
+        transition: all 0.3s ease;
+    }
+    
+    .start-point-marker:hover {
+        transform: scale(1.2);
+        z-index: 1000;
+    }
+`;
+document.head.appendChild(additionalStyles);
