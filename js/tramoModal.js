@@ -105,7 +105,7 @@ class TramoModal {
         `;
 
         /* ── Panel derecho: fotos ── */
-        this._loadGallery(d.NO_CONTRATO);
+        this._loadGallery(d.CIRCUITO);
 
         /* ── Secuencia de animación orquestada ── */
         requestAnimationFrame(() => {
@@ -142,9 +142,19 @@ class TramoModal {
     /* ═══════════════════════════════════════════
        Galería de fotos
     ═══════════════════════════════════════════ */
-    _loadGallery(contrato) {
+    /* Normaliza el nombre del circuito para usarlo como carpeta:
+       "Andes - San José - Pueblo Rico" → "andes_-_san_jose_-_pueblo_rico" */
+    _slugCircuito(nombre) {
+        return (nombre || '')
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_\-]/g, '');
+    }
+
+    _loadGallery(circuito) {
         const panel = document.getElementById('tmd-gallery');
-        if (!contrato) { panel.innerHTML = this._emptyGallery('Sin número de contrato'); return; }
+        if (!circuito) { panel.innerHTML = this._emptyGallery('Sin circuito asignado'); return; }
 
         this._photos   = [];
         this._photoIdx = 0;
@@ -155,7 +165,7 @@ class TramoModal {
                 <span>Cargando fotografías…</span>
             </div>`;
 
-        const base   = `fotografias/${contrato}/`;
+        const base   = `fotografias/${this._slugCircuito(circuito)}/`;
         const maxTry = 30;
         const found  = [];
         let   tried  = 0;
@@ -168,7 +178,7 @@ class TramoModal {
                     const nb = parseInt(b.match(/foto(\d+)/)?.[1] || 0);
                     return na - nb;
                 });
-                this._photos.length ? this._renderGallery(panel) : (panel.innerHTML = this._emptyGallery());
+                this._photos.length ? this._renderGallery(panel) : (panel.innerHTML = this._emptyGallery('Sin fotografías para este circuito'));
             }
         };
 

@@ -20,7 +20,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 2,
@@ -42,7 +42,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.03
     },
     {
         "ID": 3,
@@ -64,7 +64,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 4,
@@ -86,7 +86,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 5,
@@ -108,7 +108,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 6,
@@ -130,7 +130,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 7,
@@ -152,7 +152,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 8,
@@ -174,7 +174,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 9,
@@ -196,7 +196,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 10,
@@ -218,7 +218,7 @@ const jacData = [
         "ACTA_INICIO": "01\/20\/2026",
         "ACTA_FIN": "01\/20\/2027",
         "Dias": 23,
-        "Avance": 0.06301369863013699
+        "Avance": 0.0
     },
     {
         "ID": 11,
@@ -240,7 +240,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 12,
@@ -262,7 +262,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 13,
@@ -285,7 +285,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 14,
@@ -308,7 +308,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 15,
@@ -331,7 +331,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 16,
@@ -354,7 +354,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 17,
@@ -377,7 +377,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 18,
@@ -400,7 +400,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "08\/10\/2027",
         "Dias": 2,
-        "Avance": 0.003663003663003663
+        "Avance": 0.03
     },
     {
         "ID": 19,
@@ -423,7 +423,7 @@ const jacData = [
         "ACTA_INICIO": "02\/04\/2026",
         "ACTA_FIN": "08\/03\/2027",
         "Dias": 8,
-        "Avance": 0.014678899082568808
+        "Avance": 0.03
     },
     {
         "ID": 20,
@@ -446,7 +446,7 @@ const jacData = [
         "ACTA_INICIO": "02\/04\/2026",
         "ACTA_FIN": "08\/03\/2027",
         "Dias": 8,
-        "Avance": 0.014678899082568808
+        "Avance": 0.03
     },
     {
         "ID": 21,
@@ -469,7 +469,7 @@ const jacData = [
         "ACTA_INICIO": "02\/04\/2026",
         "ACTA_FIN": "08\/03\/2027",
         "Dias": 8,
-        "Avance": 0.014678899082568808
+        "Avance": 0.03
     },
     {
         "ID": 22,
@@ -492,7 +492,7 @@ const jacData = [
         "ACTA_INICIO": "02\/04\/2026",
         "ACTA_FIN": "08\/03\/2027",
         "Dias": 8,
-        "Avance": 0.014678899082568808
+        "Avance": 0.03
     },
     {
         "ID": 23,
@@ -515,7 +515,7 @@ const jacData = [
         "ACTA_INICIO": "02\/04\/2026",
         "ACTA_FIN": "08\/03\/2027",
         "Dias": 8,
-        "Avance": 0.014678899082568808
+        "Avance": 0.03
     },
     {
         "ID": 24,
@@ -538,7 +538,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "06\/10\/2027",
         "Dias": 2,
-        "Avance": 0.004123711340206186
+        "Avance": 0.03
     },
     {
         "ID": 25,
@@ -561,7 +561,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "06\/10\/2027",
         "Dias": 2,
-        "Avance": 0.004123711340206186
+        "Avance": 0.03
     },
     {
         "ID": 26,
@@ -584,7 +584,7 @@ const jacData = [
         "ACTA_INICIO": "02\/05\/2026",
         "ACTA_FIN": "02\/05\/2027",
         "Dias": 7,
-        "Avance": 0.019178082191780823
+        "Avance": 0.03
     },
     {
         "ID": 27,
@@ -607,7 +607,7 @@ const jacData = [
         "ACTA_INICIO": "02\/05\/2026",
         "ACTA_FIN": "02\/05\/2027",
         "Dias": 7,
-        "Avance": 0.019178082191780823
+        "Avance": 0.03
     },
     {
         "ID": 28,
@@ -630,7 +630,7 @@ const jacData = [
         "ACTA_INICIO": "02\/05\/2026",
         "ACTA_FIN": "02\/05\/2027",
         "Dias": 7,
-        "Avance": 0.019178082191780823
+        "Avance": 0.03
     },
     {
         "ID": 29,
@@ -653,7 +653,7 @@ const jacData = [
         "ACTA_INICIO": "02\/05\/2026",
         "ACTA_FIN": "02\/05\/2027",
         "Dias": 7,
-        "Avance": 0.019178082191780823
+        "Avance": 0.03
     },
     {
         "ID": 30,
@@ -676,7 +676,7 @@ const jacData = [
         "ACTA_INICIO": "02\/05\/2026",
         "ACTA_FIN": "02\/05\/2027",
         "Dias": 7,
-        "Avance": 0.019178082191780823
+        "Avance": 0.03
     },
     {
         "ID": 31,
@@ -699,7 +699,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "03\/10\/2027",
         "Dias": 2,
-        "Avance": 0.005089058524173028
+        "Avance": 0.03
     },
     {
         "ID": 32,
@@ -722,7 +722,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "03\/10\/2027",
         "Dias": 2,
-        "Avance": 0.005089058524173028
+        "Avance": 0.0
     },
     {
         "ID": 33,
@@ -745,7 +745,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "03\/10\/2027",
         "Dias": 2,
-        "Avance": 0.005089058524173028
+        "Avance": 0.03
     },
     {
         "ID": 34,
@@ -768,7 +768,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "03\/10\/2027",
         "Dias": 2,
-        "Avance": 0.005089058524173028
+        "Avance": 0.03
     },
     {
         "ID": 35,
@@ -791,7 +791,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "03\/10\/2027",
         "Dias": 2,
-        "Avance": 0.005089058524173028
+        "Avance": 0.03
     },
     {
         "ID": 36,
@@ -814,7 +814,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "03\/10\/2027",
         "Dias": 2,
-        "Avance": 0.005089058524173028
+        "Avance": 0.03
     },
     {
         "ID": 37,
@@ -837,7 +837,7 @@ const jacData = [
         "ACTA_INICIO": "02\/10\/2026",
         "ACTA_FIN": "03\/10\/2027",
         "Dias": 2,
-        "Avance": 0.005089058524173028
+        "Avance": 0.03
     },
     {
         "ID": 38,
@@ -860,7 +860,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "01\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0029940119760479044
+        "Avance": 0.03
     },
     {
         "ID": 39,
@@ -883,7 +883,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 40,
@@ -906,7 +906,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 41,
@@ -929,7 +929,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 42,
@@ -952,7 +952,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 43,
@@ -975,7 +975,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 44,
@@ -998,7 +998,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 45,
@@ -1021,7 +1021,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 46,
@@ -1044,7 +1044,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
     {
         "ID": 47,
@@ -1067,7 +1067,7 @@ const jacData = [
         "ACTA_INICIO": "02\/11\/2026",
         "ACTA_FIN": "08\/11\/2027",
         "Dias": 1,
-        "Avance": 0.0018315018315018315
+        "Avance": 0.03
     },
 
 

@@ -69,9 +69,9 @@ class FiltersManager {
         header.innerHTML = `
             <div class="header-content">
                 <div class="header-brand">
-                    <img class="logo" src="logo/Logos Gobernación-06.png" alt="" style="height:80px;width:auto;object-fit:contain;flex-shrink:0;">
+                    <img class="logo" src="logo/Logos Gobernación-04.png" alt="" style="height:50px;width:auto;object-fit:contain;flex-shrink:0;">
                     <div>
-                        <div class="header-brand-main">VÍAS PAVIMENTADAS</div>
+                        <div class="header-brand-main">PAVIMENTACIÓN VIAL</div>
                         <div class="header-brand-sub">Secretaría de Infraestructura Física</div>
                     </div>
                 </div>
@@ -448,6 +448,5 @@ class FiltersManager {
         };
     }
 }
-
 
 window.FiltersManager = FiltersManager;
