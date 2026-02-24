@@ -269,7 +269,7 @@ class ChartsManager {
         // kmEjecutado  = longitud de tramos ya intervenidos  → campo Longitud(m)
         // kmContractual= longitud total del contrato         → campo Longitud (km)
         // kmPendiente  = lo que falta por intervenir
-        const kmEjecutado   = active.reduce((s, d) => s + (parseFloat(d['Longitud(m)']) -634.4   || 0), 0);
+        const kmEjecutado   = active.reduce((s, d) => s + (parseFloat(d['Longitud(m)'])   || 0), 0)- 634.4 ;
         const kmContractual = active.reduce((s, d) => s + (parseFloat(d['Longitud(m)'])  || 0), 0);
         const kmPendiente   = Math.max(kmContractual - kmEjecutado, 0);
 
@@ -623,3 +623,4 @@ window.ChartsUtils = {
     }
 
 };
+
