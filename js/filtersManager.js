@@ -71,7 +71,7 @@ class FiltersManager {
                 <div class="header-brand">
                     <img class="logo" src="logo/Logos Gobernación-06.png" alt="" style="height:80px;width:auto;object-fit:contain;flex-shrink:0;">
                     <div>
-                        <div class="header-brand-main">ESTABILIZACIÓN VIAL</div>
+                        <div class="header-brand-main">VÍAS PAVIMENTADAS</div>
                         <div class="header-brand-sub">Secretaría de Infraestructura Física</div>
                     </div>
                 </div>
@@ -448,5 +448,6 @@ class FiltersManager {
         };
     }
 }
+
 
 window.FiltersManager = FiltersManager;
